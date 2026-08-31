@@ -1,0 +1,15 @@
+# Ruff configuration for Alfchamps backend.
+target-version = "py312"
+
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I", "UP"]
+# Depends() in FastAPI argument defaults is idiomatic.
+ignore = ["B008"]
+
+[lint.per-file-ignores]
+# Seed data contains verbatim OWASP text; keep it intact.
+"backend/app/seed/*.py" = ["E501"]
+# conftest sets env vars before importing the app on purpose.
+"backend/tests/conftest.py" = ["E402"]

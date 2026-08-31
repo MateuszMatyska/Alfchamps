@@ -1,0 +1,52 @@
+# Alfchamps backend - multi-stage build
+# Runs as a non-root user with minimal attack surface.
+
+# ---- Stage 1: build dependencies ----
+FROM python:3.12-slim AS build
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /build
+COPY backend/requirements.txt .
+# Install deps to a temp prefix so the runtime stage can copy exactly what's needed.
+RUN python -m venv /opt/venv && \
+    /opt/venv/bin/pip install --no-cache-dir --upgrade pip && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# ---- Stage 2: runtime ----
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+# Create a non-root user/group.
+RUN groupadd --gid 10001 alfchamps && \
+    useradd --uid 10001 --gid 10001 --create-home --shell /bin/sh alfchamps
+
+WORKDIR /app
+
+# Copy the pre-built virtualenv.
+COPY --from=build /opt/venv /opt/venv
+
+# Copy the application code and assets (Alfred logo / branding).
+COPY backend/app ./app
+COPY assets ./assets
+
+# Ports and data volume.
+EXPOSE 8000
+VOLUME /data
+
+# Runtime data dirs live on the mounted volume. Default to /data.
+ENV DATABASE_URL=sqlite:////data/alfchamps.db
+
+# Drop privileges.
+USER alfchamps
+
+# Health check.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status==200 else 1)"
+
+# Default command. The app is LOCAL-ONLY: bind to 127.0.0.1 only.
+CMD ["uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"]

@@ -58,6 +58,17 @@ The goal is to develop a full-stack application using **Python FastAPI** (Backen
 | **Env Vars** | `.env` file mapped to container | `.env` file loaded in shell |
 | **Network** | Internal Podman Network | Localhost |
 
+### ⚠️ Local-Only Deployment
+Alfchamps is a **local-only** tool (this is intentional). It has **no
+authentication** and must run on **localhost** only:
+- Backend binds to `127.0.0.1`; the container exposes the backend only on the
+  internal Podman network (never published to the host).
+- The frontend (nginx) is published on `127.0.0.1:8080`.
+- In local mode the frontend Vite dev server runs on `127.0.0.1:5173`.
+Do not expose Alfchamps to a network. If multi-user access or shared deployment
+is ever required, authentication and a deployment review are mandatory before
+doing so.
+
 ## Workflow Process
 1. **Architecture Phase:** Security Architect defines the security matrix $\rightarrow$ DevOps Engineer defines the environment structure.
 2. **Development Phase:** Backend Engineer implements API $\rightarrow$ Frontend Engineer integrates UI.

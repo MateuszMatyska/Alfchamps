@@ -1,0 +1,51 @@
+# Alfchamps - container orchestration (podman-compose / docker compose)
+# Runs the backend (FastAPI) and frontend (nginx) as an isolated internal network.
+# Access the app at http://localhost:8080
+#
+# Usage:
+#   podman-compose up -d --build   (or: docker compose up -d --build)
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Containerfile.backend
+    image: alfchamps-backend:latest
+    container_name: alfchamps-backend
+    # In the container the backend must listen on 0.0.0.0 so the nginx
+    # frontend container can reach it over the internal network. It is still
+    # NOT published to the host (no `ports` mapping), so it stays local-only.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      # Local-only: bind inside the container but the service is not published
+      # to the host. The frontend reaches it over the internal network.
+      DATABASE_URL: sqlite:////data/alfchamps.db
+      ALFCHAMPS_DATA_DIR: /data
+      CORS_ORIGINS: http://localhost:8080
+    volumes:
+      - alfchamps_data:/data
+    expose:
+      - "8000"
+    # Do NOT publish 8000 to the host; keep the backend local-only.
+    # ports:
+    #   - "8000:8000"
+    # Healthcheck is defined in Containerfile.backend (HEALTHCHECK), not here,
+    # because podman-compose mangles the quoting of an inline healthcheck test.
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Containerfile.frontend
+    image: alfchamps-frontend:latest
+    container_name: alfchamps-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+volumes:
+  alfchamps_data:
+    name: alfchamps_data
