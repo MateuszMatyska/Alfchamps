@@ -45,6 +45,121 @@ STATUS_COLOR = {
 }
 
 
+def _alfchamps_logo_path() -> Path:
+    """Resolve the Alfchamps cover/header logo across container + repo locations."""
+    # Mirrors the resolution reports.py already used for the cover: in containers
+    # __file__ resolves differently, so try both repo-root and working-dir paths.
+    for candidate in (
+        Path(__file__).resolve().parents[3] / "assets" / "alfchamps_logo.png",
+        Path("assets", "alfchamps_logo.png"),
+    ):
+        if candidate.exists():
+            return candidate
+    return BASE_DIR / "assets" / "alfchamps_logo.png"
+
+
+def _draw_page_furniture(canvas, doc, show_page_number: bool):
+    """Header (logo + ALFCHAMPS, one line) and footer (logo + page number)."""
+    canvas.saveState()
+    try:
+        pw, ph = A4
+        lm = doc.leftMargin
+        rm = doc.rightMargin
+        logo = _alfchamps_logo_path()
+        has_logo = logo.exists()
+
+        # ---- Header: tiny Alfchamps logo left, "ALFCHAMPS" text beside it ----
+        y_head = ph - 11 * mm
+        head_h = 6 * mm
+        if has_logo:
+            try:
+                canvas.drawImage(
+                    ImageReader(str(logo)),
+                    lm,
+                    y_head,
+                    width=head_h,
+                    height=head_h,
+                    preserveAspectRatio=True,
+                    mask="auto",
+                )
+            except (OSError, ValueError):
+                pass
+            canvas.setFont("Helvetica-Bold", 8)
+            canvas.setFillColor(accent)
+            canvas.drawString(lm + head_h + 2 * mm, y_head + 1.2 * mm, "ALFCHAMPS")
+        # subtle rule under the header on non-cover pages
+        if show_page_number:
+            canvas.setStrokeColor(colors.HexColor("#dddddd"))
+            canvas.setLineWidth(0.4)
+            canvas.line(lm, y_head - 3 * mm, pw - rm, y_head - 3 * mm)
+
+        # ---- Footer: logo (optional) + right-aligned page number ----
+        y_foot = 7 * mm
+        if has_logo:
+            try:
+                canvas.drawImage(
+                    ImageReader(str(logo)),
+                    lm,
+                    y_foot,
+                    width=4.5 * mm,
+                    height=4.5 * mm,
+                    preserveAspectRatio=True,
+                    mask="auto",
+                )
+            except (OSError, ValueError):
+                pass
+        if show_page_number:
+            canvas.setFont("Helvetica", 8)
+            canvas.setFillColor(colors.HexColor("#555555"))
+            canvas.drawRightString(pw - rm, y_foot + 0.5 * mm, str(canvas.getPageNumber()))
+    finally:
+        canvas.restoreState()
+
+
+def _page_furniture_first(canvas, doc, accent):
+    """First (cover) page: header/footer but NO page number."""
+    _draw_page_furniture(canvas, doc, accent, show_page_number=False)
+
+
+def _page_furniture_later(canvas, doc, accent):
+    """Every page after the cover: header/footer WITH page number."""
+    _draw_page_furniture(canvas, doc, accent, show_page_number=True)
+
+_COVER_FONT = "Helvetica-Bold"
+_LOGO_CANDIDATES = (
+    Path(__file__).resolve().parents[3] / "assets" / "alfchamps_logo.png",
+    Path("assets", "alfchamps_logo.png"),
+)
+
+
+def _logo_path() -> Path:
+    for candidate in _LOGO_CANDIDATES:
+        if candidate.exists():
+            return candidate
+    return _LOGO_CANDIDATES[0]
+
+
+def _table_style(accent):
+    return TableStyle(
+        [
+            ("BACKGROUND", (0, 0), (-1, 0), accent),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, 0), 9),
+            ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 1), (-1, -1), 9),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")),
+            ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#f4f6fb")),
+            ("ROWBACKGROUNDS", (0, 2), (-1, -1), [colors.white, colors.HexColor("#fafafb")]),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+        ]
+    )
+
+
 @router.get("/config")
 def get_report_config(project_id: int, db: Session = Depends(get_db)):
     project = db.get(Project, project_id)
@@ -56,6 +171,7 @@ def get_report_config(project_id: int, db: Session = Depends(get_db)):
         "company_name": cfg.company_name,
         "report_title": cfg.report_title or project.name,
         "memorial_text": cfg.memorial_text or ALFRED_TRIBUTE,
+        "exec_summary": cfg.exec_summary,
     }
 
 
@@ -76,12 +192,15 @@ def update_report_config(project_id: int, payload: dict, db: Session = Depends(g
         cfg.report_title = payload["report_title"]
     if payload.get("memorial_text") is not None:
         cfg.memorial_text = payload["memorial_text"]
+    if payload.get("exec_summary") is not None:
+        cfg.exec_summary = payload["exec_summary"]
     db.commit()
     db.refresh(cfg)
     return {
         "accent_color": cfg.accent_color,
         "company_name": cfg.company_name,
         "report_title": cfg.report_title or project.name,
+        "exec_summary": cfg.exec_summary,
     }
 
 
@@ -112,6 +231,8 @@ def generate_pdf(project_id: int, db: Session = Depends(get_db)):
         .options(
             joinedload(Project.items).joinedload(ProjectItem.screenshots),
             joinedload(Project.items).joinedload(ProjectItem.checklist_item),
+            joinedload(Project.items).joinedload(ProjectItem.children).joinedload(ProjectItem.screenshots),
+            joinedload(Project.items).joinedload(ProjectItem.children).joinedload(ProjectItem.checklist_item),
             joinedload(Project.report_config),
         )
         .filter(Project.id == project_id)
@@ -146,13 +267,14 @@ def generate_pdf(project_id: int, db: Session = Depends(get_db)):
 
     # ---- Cover ----
     story.append(Spacer(1, 8 * mm))
-    # look for the bundled copy in backend
+    # Alfchamps logo (user-provided at assets/alfchamps_logo.png). Drawn only
+    # when a real file exists - never shows a placeholder square.
     for candidate in (
-        Path(__file__).resolve().parents[3] / "assets" / "alfred_logo.png",
-        Path("assets/alfred_logo.png"),
+        Path(__file__).resolve().parents[3] / "assets" / "alfchamps_logo.png",
+        Path("assets/alfchamps_logo.png"),
     ):
         if candidate.exists():
-            story.append(Image(str(candidate), width=70 * mm, height=70 * mm))
+            story.append(Image(str(candidate), width=60 * mm, height=60 * mm))
             break
     story.append(Spacer(1, 8 * mm))
     story.append(Paragraph(_esc("ALFCHAMPS"), title_st))
@@ -160,13 +282,15 @@ def generate_pdf(project_id: int, db: Session = Depends(get_db)):
     story.append(Paragraph(_esc(report_title), sub_st))
     story.append(Spacer(1, 10 * mm))
 
-    if config.company_logo_path and Path(config.company_logo_path).exists():
-        story.append(Image(config.company_logo_path, width=45 * mm, height=45 * mm))
     company_st = ParagraphStyle("Company", parent=styles["Normal"], fontSize=14, alignment=TA_CENTER)
     if config.company_name:
         story.append(Paragraph(_esc(config.company_name), company_st))
     else:
         story.append(Paragraph("Company", ParagraphStyle("Company", parent=company_st, textColor=colors.grey)))
+    # Company logo sits below the company name (only when one was uploaded).
+    if config.company_logo_path and Path(config.company_logo_path).exists():
+        story.append(Spacer(1, 4 * mm))
+        story.append(Image(config.company_logo_path, width=35 * mm, height=35 * mm))
 
     story.append(Spacer(1, 12 * mm))
     mem_st = ParagraphStyle(
@@ -190,8 +314,13 @@ def generate_pdf(project_id: int, db: Session = Depends(get_db)):
     story.append(t)
     story.append(PageBreak())
 
-    # ---- Summary ----
+    # ---- Executive Summary ----
     story.append(Paragraph("Executive Summary", h1))
+    if (config.exec_summary or "").strip():
+        exec_st = ParagraphStyle(
+            "Exec", parent=styles["BodyText"], fontSize=9.5, leading=13.5, spaceAfter=12
+        )
+        story.append(Paragraph(_esc(config.exec_summary).replace("\n", "<br/>"), exec_st))
     counts = {s: 0 for s in STATUS_LABEL}
     for pi in project.items:
         counts[pi.status] = counts.get(pi.status, 0) + 1
@@ -211,6 +340,8 @@ def generate_pdf(project_id: int, db: Session = Depends(get_db)):
     for ci in db.query(ChecklistItem).all():
         std_of[ci.id] = ci.standard
     for pi in project.items:
+        if pi.parent_id is not None:
+            continue  # sub-points are rendered under their parent below
         std = std_of.get(pi.checklist_item_id)
         key = std.name if std else "Custom items"
         groups.setdefault(key, []).append(pi)
@@ -232,44 +363,70 @@ def generate_pdf(project_id: int, db: Session = Depends(get_db)):
         story.append(Spacer(1, 6 * mm))
 
         for pi in items:
-            code = pi.checklist_item.code if pi.checklist_item else "-"
-            title = pi.checklist_item.title if pi.checklist_item else ""
-            desc = getattr(pi.checklist_item, "description", "") if pi.checklist_item else ""
-            how = getattr(pi.checklist_item, "how_to_test", "") if pi.checklist_item else ""
-            item_st = ParagraphStyle(
-                "Item", parent=styles["Heading3"], fontSize=10.5, textColor=accent, spaceBefore=8
-            )
-            story.append(Paragraph(_esc(f"{code} - {title}"), item_st))
-            if desc:
-                story.append(Paragraph(_esc("What / Why: ") + _esc(desc), body))
-            if how:
-                story.append(Paragraph(_esc("How to test: ") + _esc(how), body))
-            if pi.notes:
-                story.append(Paragraph(_esc("Notes: ") + _esc(pi.notes), body))
-            if pi.reproduce_steps:
-                story.append(Paragraph(_esc("Reproduction steps: ") + _esc(pi.reproduce_steps), body))
-            for shot in pi.screenshots:
-                p = Path(shot.file_path)
-                if p.exists():
-                    try:
-                        ir = ImageReader(str(p))
-                        iw, ih = ir.getSize()
-                        max_w, max_h = 120 * mm, 90 * mm
-                        scale = min(max_w / iw, max_h / ih)
-                        if scale >= 1:
-                            w, h = iw, ih
-                        else:
-                            w, h = iw * scale, ih * scale
-                        story.append(Image(str(p), width=w, height=h))
-                    except (OSError, ValueError):
-                        story.append(Paragraph("(screenshot could not be embedded)", body))
-            stat_st = ParagraphStyle(
-                "Stat", parent=styles["Normal"], fontSize=9, textColor=STATUS_COLOR.get(pi.status, colors.black)
-            )
-            story.append(Paragraph(f"<b>Status:</b> {STATUS_LABEL.get(pi.status, pi.status)}", stat_st))
+            _render_finding(story, pi, styles, body, accent)
+            for child in sorted(pi.children or [], key=lambda c: c.id):
+                _render_finding(story, child, styles, body, accent, is_sub=True)
 
     doc.build(story)
     return FileResponse(str(out_file), filename=f"alfchamps-{project.id}.pdf", media_type="application/pdf")
+
+
+def _render_finding(story, pi, styles, body, accent, is_sub: bool = False):
+    code = pi.checklist_item.code if pi.checklist_item else "-"
+    title = pi.checklist_item.title if pi.checklist_item else ""
+    desc = getattr(pi.checklist_item, "description", "") if pi.checklist_item else ""
+    how = getattr(pi.checklist_item, "how_to_test", "") if pi.checklist_item else ""
+    left = 12 if is_sub else 0
+    item_st = ParagraphStyle(
+        "Item",
+        parent=styles["Heading3"],
+        fontSize=(9.5 if is_sub else 10.5),
+        textColor=colors.HexColor("#444444") if is_sub else accent,
+        spaceBefore=(4 if is_sub else 8),
+        leftIndent=left,
+    )
+    prefix = "└ " if is_sub else ""
+    story.append(Paragraph(_esc(f"{prefix}{code} - {title}"), item_st))
+    if desc:
+        story.append(Paragraph(_esc("What / Why: ") + _esc(desc), _indented(body, left)))
+    if how:
+        story.append(Paragraph(_esc("How to test: ") + _esc(how), _indented(body, left)))
+    if pi.notes:
+        story.append(Paragraph(_esc("Notes: ") + _esc(pi.notes), _indented(body, left)))
+    if is_sub:
+        if pi.reproduce_steps:
+            story.append(Paragraph(_esc("Reproduction steps: ") + _esc(pi.reproduce_steps), _indented(body, left)))
+        for shot in pi.screenshots:
+            p = Path(shot.file_path)
+            if p.exists():
+                try:
+                    ir = ImageReader(str(p))
+                    iw, ih = ir.getSize()
+                    max_w, max_h = 120 * mm, 90 * mm
+                    scale = min(max_w / iw, max_h / ih)
+                    if scale >= 1:
+                        w, h = iw, ih
+                    else:
+                        w, h = iw * scale, ih * scale
+                    story.append(Image(str(p), width=w, height=h))
+                except (OSError, ValueError):
+                    story.append(Paragraph("(screenshot could not be embedded)", _indented(body, left)))
+    stat_st = ParagraphStyle(
+        "Stat",
+        parent=styles["Normal"],
+        fontSize=9,
+        textColor=STATUS_COLOR.get(pi.status, colors.black),
+        leftIndent=left,
+    )
+    story.append(Paragraph(f"<b>Status:</b> {STATUS_LABEL.get(pi.status, pi.status)}", stat_st))
+
+
+def _indented(style, left: int):
+    import copy
+
+    out = copy.copy(style)
+    out.leftIndent = (style.leftIndent or 0) + left
+    return out
 
 
 def _esc(text: str) -> str:

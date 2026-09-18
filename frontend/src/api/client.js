@@ -75,3 +75,7 @@ export const api = {
 
 export const screenshotUrl = (projectId, itemId, screenshotId) =>
   `/projects/${projectId}/items/${itemId}/screenshots/${screenshotId}/file`
+
+export const memorialPhotoUrl = () => '/memorial/photo'
+
+export const alfchampsLogoUrl = () => '/assets/alfchamps_logo.png'

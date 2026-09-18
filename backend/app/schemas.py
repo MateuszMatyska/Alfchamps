@@ -35,6 +35,7 @@ class StandardWithItems(StandardOut):
 class ProjectItemOut(BaseModel):
     id: int
     checklist_item_id: int
+    parent_id: int | None = None
     code: str = ""
     title: str = ""
     description: str = ""
@@ -43,6 +44,7 @@ class ProjectItemOut(BaseModel):
     notes: str
     reproduce_steps: str
     screenshots: list["ScreenshotOut"] = []
+    children: list["ProjectItemOut"] = []
 
     class Config:
         from_attributes = True
@@ -76,6 +78,7 @@ class ReportConfigOut(BaseModel):
     accent_color: str
     company_name: str
     report_title: str
+    exec_summary: str = ""
 
     class Config:
         from_attributes = True
@@ -98,6 +101,8 @@ class ProjectItemAdd(BaseModel):
     title: str = Field(min_length=1, max_length=256)
     description: str = ""
     how_to_test: str = ""
+    reproduce_steps: str = ""
+    parent_id: int | None = None
 
 
 class StandardSelect(BaseModel):
@@ -111,3 +116,4 @@ class ReportConfigUpdate(BaseModel):
     company_name: str = ""
     report_title: str = ""
     memorial_text: str = ""
+    exec_summary: str = ""

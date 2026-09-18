@@ -9,6 +9,7 @@ export default function ReportSettings() {
   const [color, setColor] = useState('#1a56db')
   const [companyName, setCompanyName] = useState('')
   const [reportTitle, setReportTitle] = useState('')
+  const [execSummary, setExecSummary] = useState('')
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
 
@@ -19,6 +20,7 @@ export default function ReportSettings() {
         setColor(c.accent_color)
         setCompanyName(c.company_name || '')
         setReportTitle(c.report_title || '')
+        setExecSummary(c.exec_summary || '')
       })
       .catch((e) => setError(e.message))
   }, [id])
@@ -31,6 +33,7 @@ export default function ReportSettings() {
         accent_color: color,
         company_name: companyName,
         report_title: reportTitle,
+        exec_summary: execSummary,
       })
       setSaved(true)
     } catch (e) {
@@ -114,6 +117,21 @@ export default function ReportSettings() {
             <input type="file" accept="image/*" style={{ display: 'none' }} onChange={onLogo} />
           </label>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>Executive Summary</h3>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Custom text shown at the top of the report&apos;s Executive Summary page,
+          above the status table. If left empty, only the table is shown.
+        </p>
+        <textarea
+          className="textarea"
+          value={execSummary}
+          onChange={(e) => setExecSummary(e.target.value)}
+          placeholder={'This assessment covered…\nKey findings include…'}
+          rows={5}
+        />
       </div>
 
       <div className="action-row">

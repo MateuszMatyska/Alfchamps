@@ -3,7 +3,7 @@
 Project: Security reporting tool for pen testers / security engineers (tribute to Alfred, our champion).
 Stack: FastAPI + SQLite/SQLAlchemy + ReportLab (PDF) / React + Vite. Dual deployment (local venv + podman/docker).
 
-Last updated: 2026-08-31
+Last updated: 2026-09-17
 
 ## Status Legend
 - [x] Done and verified
@@ -72,12 +72,30 @@ Seeders in `backend/app/seed/` (idempotent, helpers in `helpers.py`):
 - `AGENTS.md` updated with **LOCAL-ONLY (no auth)** deployment note
 - `.gitignore` created (`.venv`, `node_modules`, `dist`, `.env`, `data/`, `*.db`, caches)
 
+## 9. Done — Custom sub-checks, cover redesign, exec summary (2026-09-17)
+- **Custom checks are now sub-points** nested under the checklist item they were created on:
+  - `ProjectItem.parent_id` self-FK + `children` relationship (cascade delete-orphan)
+  - Startup migration in `database.py` adds `parent_id` + `exec_summary` columns to existing SQLite DBs (verified against dev DB)
+  - `get_project` returns nested `children`; sub-points can't be nested further and must belong to the project (400/404 enforced)
+  - Add form in Workspace now: code/title/description/**reproduction steps**/**multi-screenshot upload**, creates item under the active item
+  - Left list renders sub-points as indented child rows; clicking opens their editable detail pane
+  - PDF renders sub-points indented under the parent with notes/repro/screenshots
+- **Cover redesign** (per user decisions):
+  - Top is **ALFCHAMPS logo** from `assets/alfchamps_logo.png` (user-provided; drawn only if file exists — no placeholder square)
+  - Company logo moved **below the company name**; deleted the old solid-blue `assets/alfred_logo.png`
+  - Alfred's photo moves to the **Memorial page only** (`assets/alfred_photo.png`) via new `GET /memorial/photo` + `has_photo` flag
+- **Executive summary custom text**:
+  - `ReportConfig.exec_summary` + config GET/PUT + schema
+  - Textarea in Report Settings; rendered **above** the status-count table (table unchanged)
+- **Verified:** 16 pytest tests pass, ruff clean, ESLint clean, Vite build OK, full E2E via TestClient AND through the running Podman stack (migration on the persisted volume DB, sub-point + screenshots + exec summary + PDF, logo on cover, memorial photo served)
+
 ---
 
 ## Remaining / follow-ups
-- [ ] If podman/docker available: `make podman-up` / `make docker-up` to verify container paths end-to-end
-- [ ] Optional: end-to-end browser check of the frontend against the running backend (`make run-backend` + `make run-frontend`)
-- [ ] Drop a real photo of Alfred into `assets/` and reference it (see `assets/README.md`)
+- [x] Podman container deployment verified end-to-end (`make podman-up` / `podman-compose up -d --build`)
+- [ ] Optional: end-to-end browser check of the new sub-check flow + cover + exec summary in the UI
+- [x] Real Alfchamps logo at `assets/alfchamps_logo.png` and Alfred's photo at `assets/alfred_photo.png` provided
+- [ ] Optional: switch backend build image format to `docker` so `HEALTHCHECK` shows in `podman ps` (cosmetic)
 
 ---
 

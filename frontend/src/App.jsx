@@ -1,4 +1,5 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
+import { alfchampsLogoUrl } from './api/client.js'
 import Dashboard from './pages/Dashboard.jsx'
 import NewTest from './pages/NewTest.jsx'
 import WorkspacePage from './pages/Workspace.jsx'
@@ -11,19 +12,20 @@ export default function App() {
       <header className="app-header">
         <div className="app-header-inner">
           <NavLink to="/" className="brand">
-            <span className="brand-emoji" aria-hidden="true">
-              🏆
-            </span>
-            <span className="brand-name">Alfchamps</span>
+            <img
+              src={alfchampsLogoUrl()}
+              alt="Alfchamps logo"
+              style={{ height: 120, width: 120, objectFit: 'contain', display: 'inline-block' }}
+            />
           </NavLink>
           <nav className="nav">
-            <NavLink to="/" className="nav-link" end>
+            <NavLink to="/" className="nav-link" end title="Back to project list">
               Tests
             </NavLink>
-            <NavLink to="/new" className="nav-link">
+            <NavLink to="/new" className="nav-link" title="Create a new test">
               New Test
             </NavLink>
-            <NavLink to="/memorial" className="nav-link">
+            <NavLink to="/memorial" className="nav-link" title="In memory of Alfred">
               Memorial
             </NavLink>
           </nav>

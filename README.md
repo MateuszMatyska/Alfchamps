@@ -20,8 +20,8 @@ PDF reports.
   - Mobile — **MASVS**
   - GenAI / LLM — **OWASP GenAI LLM Top 10 (2026)**
 - **Test wizard**: name a test, pick standards, and (for ASVS) choose a verification level.
-- **Workspace**: grouped checklist with per-item status, notes, reproduction steps, and screenshot uploads. Add your own custom checks.
-- **Branded PDF reports**: choose an accent color, add a company name/logo, and download a themed PDF with an executive summary, per-item detail, the **Alfchamps logo and Alfred's photo**, and Alfred's tribute on the cover.
+- **Workspace**: grouped checklist with per-item status, notes, reproduction steps, and screenshot uploads. Add your own custom checks as **sub-points** nested under the item you're testing (with their own repro steps and screenshots).
+- **Branded PDF reports**: choose an accent color, add a company name/logo, and download a themed PDF with a custom executive summary, per-item detail (sub-points included), the **Alfchamps logo** on the cover, and Alfred's tribute.
 
 ## Tech stack
 

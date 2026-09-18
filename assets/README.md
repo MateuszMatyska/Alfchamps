@@ -2,16 +2,25 @@
 
 This folder holds the brand and tribute assets.
 
-## Alfred's logo / photo
+## Alfchamps logo
 
-Drop **Alfred's photo** here as `alfred_logo.png`. It is shown:
-- in the application header,
+Drop the **Alfchamps logo** here as `alfchamps_logo.png`. It is shown:
 - on the cover of every generated PDF report.
 
-A blue placeholder (`alfred_logo.png`) is committed so the app works out of the
-box. Replace it with a real photo whenever ready.
+If the file is missing, the report cover simply skips the logo (no placeholder
+square is drawn).
 
 - Recommended: a square image, ideally 512x512 or larger.
+- Format: PNG preferred (jpg/jpeg/webp also accepted by the app).
+
+## Alfred's photo
+
+Drop **Alfred's photo** here as `alfred_photo.png`. It is shown:
+- on the in-app **Memorial** page only (not in the PDF report).
+
+If the file is missing, the Memorial page shows the tribute text only.
+
+- A portrait or landscape photo both work; the page scales it to fit.
 - Format: PNG preferred (jpg/jpeg/webp also accepted by the app).
 
 ## Company logos

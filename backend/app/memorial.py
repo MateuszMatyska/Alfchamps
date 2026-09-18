@@ -13,7 +13,7 @@ ALFRED_TRIBUTE = (
 ALFRED_TAGLINE = "In memory of Alfred \u2014 our champion"
 
 ALFRED_PHOTO_HINT = (
-    "Drop Alfred's photo as assets/alfred_logo.png to have it shown on the report cover."
+    "Drop Alfred's photo as assets/alfred_photo.png to have it shown on the Memorial page."
 )
 
 MEMORIAL_DEFAULT = ALFRED_TRIBUTE

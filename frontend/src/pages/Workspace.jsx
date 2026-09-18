@@ -12,6 +12,8 @@ const STATUS_LABEL = {
   na: 'N/A',
 }
 
+const EMPTY_CUSTOM = { code: '', title: '', description: '', reproduce_steps: '' }
+
 export default function WorkspacePage() {
   const { id } = useParams()
   const [project, setProject] = useState(null)
@@ -20,7 +22,8 @@ export default function WorkspacePage() {
   const [active, setActive] = useState(null)
   const [draft, setDraft] = useState({ status: '', notes: '', reproduce_steps: '' })
   const [saving, setSaving] = useState(false)
-  const [custom, setCustom] = useState({ code: '', title: '', description: '' })
+  const [custom, setCustom] = useState(EMPTY_CUSTOM)
+  const [customFiles, setCustomFiles] = useState([])
 
   const load = useCallback(
     (init = false) => {
@@ -49,10 +52,16 @@ export default function WorkspacePage() {
 
   useEffect(() => load(true), [load])
 
-  const activeItem = useMemo(
-    () => (project?.items || []).find((i) => i.id === active),
-    [project, active],
-  )
+  const findItem = useCallback((items, itemId) => {
+    for (const it of items || []) {
+      if (it.id === itemId) return it
+      const found = findItem(it.children || [], itemId)
+      if (found) return found
+    }
+    return null
+  }, [])
+
+  const activeItem = useMemo(() => findItem(project?.items || [], active), [project, active, findItem])
 
   const groupName = (code) => {
     if (code.startsWith('API')) return 'OWASP API Top 10'
@@ -69,8 +78,8 @@ export default function WorkspacePage() {
     const map = {}
     let customGroup = null
     project.items.forEach((item) => {
-      const hasStd = item.code !== '' && !item.code.startsWith('CUSTOM')
-      const key = hasStd ? groupName(item.code) : 'Custom items'
+      const isCustom = !item.code || item.code.startsWith('CUSTOM')
+      const key = isCustom ? 'Custom items' : groupName(item.code)
       if (key === 'Custom items') customGroup = customGroup || { name: key, items: [] }
       const g = key === 'Custom items' ? customGroup : (map[key] = map[key] || { name: key, items: [] })
       g.items.push(item)
@@ -81,13 +90,14 @@ export default function WorkspacePage() {
   }, [project])
 
   const selectItem = (itemId) => {
+    const it = findItem(project.items, itemId)
     setActive(itemId)
-    const it = project.items.find((i) => i.id === itemId)
     setDraft({
       status: it.status,
       notes: it.notes,
       reproduce_steps: it.reproduce_steps,
     })
+    setError('')
   }
 
   const save = async () => {
@@ -119,21 +129,45 @@ export default function WorkspacePage() {
     e.target.value = ''
   }
 
-  const addCustom = async () => {
+  const onAddFiles = (e) => {
+    setCustomFiles(Array.from(e.target.files || []))
+  }
+
+  const addSub = async () => {
     if (!custom.title.trim()) {
-      setError('Custom check needs a title.')
+      setError('Custom sub-check needs a title.')
       return
     }
+    if (!activeItem) {
+      setError('Select a checklist item to add the sub-check under.')
+      return
+    }
+    setSaving(true)
+    setError('')
     try {
-      await api.addCustomItem(id, {
+      const created = await api.addCustomItem(id, {
         code: custom.code.trim() || 'CUSTOM',
         title: custom.title.trim(),
         description: custom.description,
+        reproduce_steps: custom.reproduce_steps,
+        parent_id: activeItem.id,
       })
-      setCustom({ code: '', title: '', description: '' })
-      load()
+      for (const file of customFiles) {
+        await api.uploadScreenshot(id, created.id, file, '')
+      }
+      setCustom(EMPTY_CUSTOM)
+      setCustomFiles([])
+      await load()
+      setActive(created.id)
+      setDraft({
+        status: created.status || 'not_tested',
+        notes: created.notes || '',
+        reproduce_steps: created.reproduce_steps || custom.reproduce_steps,
+      })
+      setSaving(false)
     } catch (e) {
       setError(e.message)
+      setSaving(false)
     }
   }
 
@@ -160,18 +194,34 @@ export default function WorkspacePage() {
                 {g.name} ({g.items.length})
               </div>
               {g.items.map((item) => (
-                <div
-                  key={item.id}
-                  className={`group-item ${item.id === active ? 'active' : ''}`}
-                  onClick={() => selectItem(item.id)}
-                >
-                  <div>
-                    <div className="group-item-code">{item.code}</div>
-                    <div className="group-item-title">{item.title}</div>
+                <div key={item.id}>
+                  <div
+                    className={`group-item ${item.id === active ? 'active' : ''}`}
+                    onClick={() => selectItem(item.id)}
+                  >
+                    <div>
+                      <div className="group-item-code">{item.code}</div>
+                      <div className="group-item-title">{item.title}</div>
+                    </div>
+                    <span className={`tag`} style={{ background: statusColor(item.status) }}>
+                      {STATUS_LABEL[item.status]}
+                    </span>
                   </div>
-                  <span className={`tag`} style={{ background: statusColor(item.status) }}>
-                    {STATUS_LABEL[item.status]}
-                  </span>
+                  {(item.children || []).map((child) => (
+                    <div
+                      key={child.id}
+                      className={`group-item sub-item ${child.id === active ? 'active' : ''}`}
+                      onClick={() => selectItem(child.id)}
+                    >
+                      <div>
+                        <div className="group-item-code">{child.code}</div>
+                        <div className="group-item-title">{child.title}</div>
+                      </div>
+                      <span className={`tag`} style={{ background: statusColor(child.status) }}>
+                        {STATUS_LABEL[child.status]}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
@@ -222,82 +272,109 @@ export default function WorkspacePage() {
                 />
               </div>
 
-              <div style={{ marginTop: 16 }}>
-                <label className="label">Reproduction steps</label>
-                <textarea
-                  className="textarea"
-                  value={draft.reproduce_steps}
-                  onChange={(e) => setDraft({ ...draft, reproduce_steps: e.target.value })}
-                  placeholder={'1. Navigate to…\n2. Send request…'}
-                />
-              </div>
-
-              <div className="action-row">
-                <button className="btn" onClick={save} disabled={saving}>
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-                <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
-                  Upload screenshot
-                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={onUpload} />
-                </label>
-              </div>
-
-              {(activeItem.screenshots || []).length > 0 && (
-                <div className="grid" style={{ marginTop: 16 }}>
-                  {activeItem.screenshots.map((shot) => (
-                    <img
-                      key={shot.id}
-                      className="screenshot"
-                      src={screenshotUrl(id, activeItem.id, shot.id)}
-                      alt={shot.alt_text || 'screenshot'}
+              {activeItem.parent_id != null && (
+                <>
+                  <div style={{ marginTop: 16 }}>
+                    <label className="label">Reproduction steps</label>
+                    <textarea
+                      className="textarea"
+                      value={draft.reproduce_steps}
+                      onChange={(e) => setDraft({ ...draft, reproduce_steps: e.target.value })}
+                      placeholder={'1. Navigate to…\n2. Send request…'}
                     />
-                  ))}
+                  </div>
+
+                  <div className="action-row">
+                    <button className="btn" onClick={save} disabled={saving}>
+                      {saving ? 'Saving…' : 'Save'}
+                    </button>
+                    <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+                      Upload screenshot
+                      <input type="file" accept="image/*" style={{ display: 'none' }} onChange={onUpload} />
+                    </label>
+                  </div>
+
+                  {(activeItem.screenshots || []).length > 0 && (
+                    <div className="grid" style={{ marginTop: 16 }}>
+                      {activeItem.screenshots.map((shot) => (
+                        <img
+                          key={shot.id}
+                          className="screenshot"
+                          src={screenshotUrl(id, activeItem.id, shot.id)}
+                          alt={shot.alt_text || 'screenshot'}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              {activeItem.parent_id == null && (
+                <div className="action-row">
+                  <button className="btn" onClick={save} disabled={saving}>
+                    {saving ? 'Saving…' : 'Save'}
+                  </button>
                 </div>
               )}
+
+              <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+                <h3>Add sub-check to this item</h3>
+                <div className="grid grid-2">
+                  <div>
+                    <label className="label">Code (optional)</label>
+                    <input
+                      className="input"
+                      value={custom.code}
+                      onChange={(e) => setCustom({ ...custom, code: e.target.value })}
+                      placeholder="CUSTOM-01"
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Title</label>
+                    <input
+                      className="input"
+                      value={custom.title}
+                      onChange={(e) => setCustom({ ...custom, title: e.target.value })}
+                      placeholder="Custom security check"
+                    />
+                  </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <label className="label">Description</label>
+                  <textarea
+                    className="textarea"
+                    value={custom.description}
+                    onChange={(e) => setCustom({ ...custom, description: e.target.value })}
+                    placeholder="What to test and how…"
+                  />
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <label className="label">Reproduction steps</label>
+                  <textarea
+                    className="textarea"
+                    value={custom.reproduce_steps}
+                    onChange={(e) => setCustom({ ...custom, reproduce_steps: e.target.value })}
+                    placeholder={'1. Navigate to…\n2. Send request…'}
+                  />
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <label className="label">Screenshots (optional)</label>
+                  <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+                    {customFiles.length ? `Choose screenshots (${customFiles.length} selected)` : 'Choose screenshots'}
+                    <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onAddFiles} />
+                  </label>
+                </div>
+                <div className="action-row" style={{ marginTop: 12 }}>
+                  <button className="btn btn-secondary" onClick={addSub} disabled={saving}>
+                    {saving ? 'Adding…' : 'Add sub-check'}
+                  </button>
+                </div>
+              </div>
             </>
           ) : (
             <div className="empty-state">
               <p>Select a checklist item to begin.</p>
             </div>
           )}
-
-          <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-            <h3>Add custom check</h3>
-            <div className="grid grid-2">
-              <div>
-                <label className="label">Code (optional)</label>
-                <input
-                  className="input"
-                  value={custom.code}
-                  onChange={(e) => setCustom({ ...custom, code: e.target.value })}
-                  placeholder="CUSTOM-01"
-                />
-              </div>
-              <div>
-                <label className="label">Title</label>
-                <input
-                  className="input"
-                  value={custom.title}
-                  onChange={(e) => setCustom({ ...custom, title: e.target.value })}
-                  placeholder="Custom security check"
-                />
-              </div>
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <label className="label">Description</label>
-              <textarea
-                className="textarea"
-                value={custom.description}
-                onChange={(e) => setCustom({ ...custom, description: e.target.value })}
-                placeholder="What to test and how…"
-              />
-            </div>
-            <div className="action-row">
-              <button className="btn btn-secondary" onClick={addCustom}>
-                Add custom check
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

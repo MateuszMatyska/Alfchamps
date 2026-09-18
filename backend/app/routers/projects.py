@@ -40,13 +40,22 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     result = ProjectDetail.model_validate(project)
+    out_by_id = {out.id: out for out in result.items}
+    for out in result.items:
+        out.children = []
     for pi in project.items:
-        for out in result.items:
-            if out.id == pi.id:
-                out.code = pi.checklist_item.code if pi.checklist_item else ""
-                out.title = pi.checklist_item.title if pi.checklist_item else ""
-                out.description = pi.checklist_item.description if pi.checklist_item else ""
-                out.how_to_test = pi.checklist_item.how_to_test if pi.checklist_item else ""
+        out = out_by_id[pi.id]
+        out.parent_id = pi.parent_id
+        out.code = pi.checklist_item.code if pi.checklist_item else ""
+        out.title = pi.checklist_item.title if pi.checklist_item else ""
+        out.description = pi.checklist_item.description if pi.checklist_item else ""
+        out.how_to_test = pi.checklist_item.how_to_test if pi.checklist_item else ""
+    for pi in project.items:
+        if pi.parent_id is not None and pi.parent_id in out_by_id:
+            out_by_id[pi.parent_id].children.append(out_by_id[pi.id])
+    for out in result.items:
+        out.children.sort(key=lambda c: c.id)
+    result.items = [out for out in result.items if out.parent_id is None]
     return result
 
 

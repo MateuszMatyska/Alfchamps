@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../api/client.js'
+import { api, memorialPhotoUrl } from '../api/client.js'
 
 export default function Memorial() {
   const [data, setData] = useState(null)
@@ -18,6 +18,13 @@ export default function Memorial() {
       <div className="card" style={{ textAlign: 'center', maxWidth: 640, margin: '0 auto', padding: 40 }}>
         <h1 style={{ marginBottom: 4 }}>🏆</h1>
         <h2 style={{ marginTop: 0 }}>{data ? data.tagline : 'Alfchamps'}</h2>
+        {data && data.has_photo && (
+          <img
+            src={memorialPhotoUrl()}
+            alt="Alfred"
+            style={{ maxWidth: '100%', maxHeight: 420, borderRadius: 12, marginTop: 8 }}
+          />
+        )}
         {error ? (
           <div className="error-box">{error}</div>
         ) : data ? (

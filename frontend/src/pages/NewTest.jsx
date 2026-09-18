@@ -85,7 +85,7 @@ export default function NewTest() {
                 <input type="checkbox" checked={!!selected[s.slug]} onChange={() => toggle(s.slug)} />
                 <div>
                   <strong>{s.name}</strong>
-                  <div className="muted" style={{ fontSize: 13 }}>
+                  <div className="muted" style={{ }}>
                     {s.edition} — {s.description.slice(0, 90)}
                     {s.description.length > 90 ? '…' : ''}
                   </div>
@@ -112,7 +112,7 @@ export default function NewTest() {
                   <input type="radio" checked={asvsLevel === o.v} onChange={() => setAsvsLevel(o.v)} />
                   <div>
                     <strong>{o.t}</strong>
-                    <div className="muted" style={{ fontSize: 13 }}>
+                    <div className="muted" style={{ }}>
                       {o.d}
                     </div>
                   </div>

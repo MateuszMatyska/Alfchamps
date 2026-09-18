@@ -60,6 +60,7 @@ class ProjectItem(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), index=True)
     checklist_item_id: Mapped[int] = mapped_column(ForeignKey("checklist_items.id"))
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("project_items.id"), index=True, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="not_tested")
     notes: Mapped[str] = mapped_column(Text, default="")
     reproduce_steps: Mapped[str] = mapped_column(Text, default="")
@@ -69,6 +70,10 @@ class ProjectItem(Base):
     screenshots: Mapped[list["Screenshot"]] = relationship(
         back_populates="project_item", cascade="all, delete-orphan"
     )
+    children: Mapped[list["ProjectItem"]] = relationship(
+        back_populates="parent", cascade="all, delete-orphan"
+    )
+    parent: Mapped["ProjectItem | None"] = relationship(back_populates="children", remote_side="ProjectItem.id")
 
 
 class Screenshot(Base):
@@ -92,6 +97,7 @@ class ReportConfig(Base):
     company_name: Mapped[str] = mapped_column(String(256), default="")
     company_logo_path: Mapped[str] = mapped_column(String(512), default="")
     memorial_text: Mapped[str] = mapped_column(Text, default="")
+    exec_summary: Mapped[str] = mapped_column(Text, default="")
     report_title: Mapped[str] = mapped_column(String(256), default="")
 
     project: Mapped["Project"] = relationship(back_populates="report_config")

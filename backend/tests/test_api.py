@@ -89,6 +89,50 @@ def test_add_custom_item(client, project_id):
     assert r.json()["code"] == "CUSTOM-01"
 
 
+def test_add_sub_point_and_nested_listing(client, project_id):
+    parent = client.get(f"/projects/{project_id}").json()["items"][0]
+    r = client.post(
+        f"/projects/{project_id}/items",
+        json={
+            "code": "CUSTOM-SUB",
+            "title": "Sub check",
+            "description": "d",
+            "how_to_test": "h",
+            "reproduce_steps": "1. do a\n2. do b",
+            "parent_id": parent["id"],
+        },
+    )
+    assert r.status_code == 200, r.text
+    sub_id = r.json()["id"]
+    assert r.json()["reproduce_steps"] == "1. do a\n2. do b"
+
+    detail = client.get(f"/projects/{project_id}").json()
+    top_ids = [i["id"] for i in detail["items"]]
+    assert sub_id not in top_ids
+    parent_out = next(i for i in detail["items"] if i["id"] == parent["id"])
+    assert [c["id"] for c in parent_out["children"]] == [sub_id]
+
+
+def test_sub_point_parent_validation(client, project_id):
+    parent = client.get(f"/projects/{project_id}").json()["items"][0]
+    sub = client.post(
+        f"/projects/{project_id}/items",
+        json={"code": "S1", "title": "sub", "parent_id": parent["id"]},
+    ).json()
+    # a sub-point cannot be used as a parent
+    r = client.post(
+        f"/projects/{project_id}/items",
+        json={"code": "S2", "title": "bad", "parent_id": sub["id"]},
+    )
+    assert r.status_code == 400
+    # parent must belong to the project
+    r = client.post(
+        f"/projects/{project_id}/items",
+        json={"code": "S3", "title": "bad", "parent_id": 999999},
+    )
+    assert r.status_code == 404
+
+
 def test_screenshot_upload_and_serve(client, project_id):
     r = client.get(f"/projects/{project_id}")
     item = r.json()["items"][0]
@@ -135,9 +179,54 @@ def test_report_config(client, project_id):
     assert r.json()["company_name"] == "ACME"
 
 
+def test_exec_summary_roundtrip(client, project_id):
+    r = client.put(
+        f"/projects/{project_id}/report/config",
+        json={
+            "accent_color": "#123456",
+            "company_name": "ACME",
+            "report_title": "My Report",
+            "exec_summary": "We tested things.\nMore details.",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["exec_summary"] == "We tested things.\nMore details."
+    got = client.get(f"/projects/{project_id}/report/config").json()
+    assert got["exec_summary"] == "We tested things.\nMore details."
+
+
+def test_memorial_photo_endpoint(client):
+    data = client.get("/memorial").json()
+    assert isinstance(data["has_photo"], bool)
+    r = client.get("/memorial/photo")
+    if data["has_photo"]:
+        assert r.status_code == 200
+        assert r.content[:8] == b"\x89PNG\r\n\x1a\n"
+    else:
+        assert r.status_code == 404
+
+
 def test_report_pdf_generated(client, project_id):
     r = client.get(f"/projects/{project_id}/report/pdf")
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/pdf"
+    assert r.content[:5] == b"%PDF-"
+    assert r.content.rstrip().endswith(b"%%EOF")
+
+
+def test_report_pdf_with_sub_points_and_exec_summary(client, project_id):
+    parent = client.get(f"/projects/{project_id}").json()["items"][0]
+    sub = client.post(
+        f"/projects/{project_id}/items",
+        json={"code": "C-SUB", "title": "Sub finding", "reproduce_steps": "steps", "parent_id": parent["id"]},
+    )
+    assert sub.status_code == 200, sub.text
+    client.put(
+        f"/projects/{project_id}/report/config",
+        json={"accent_color": "#123456", "exec_summary": "Executive narrative here"},
+    )
+    # header of the sub-point (used in the grouped table) must stay out of charts
+    r = client.get(f"/projects/{project_id}/report/pdf")
+    assert r.status_code == 200
     assert r.content[:5] == b"%PDF-"
     assert r.content.rstrip().endswith(b"%%EOF")

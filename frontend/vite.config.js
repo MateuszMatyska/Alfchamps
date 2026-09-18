@@ -9,6 +9,7 @@ export default defineConfig({
       '/standards': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/projects': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/health': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/assets/alfchamps_logo.png': { target: 'http://127.0.0.1:8000', changeOrigin: true },
       '/memorial': { target: 'http://127.0.0.1:8000', changeOrigin: true },
     },
   },
