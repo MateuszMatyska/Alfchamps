@@ -1,4 +1,6 @@
-# Alfchamps 🏆
+<img src="assets/alfchamps_logo.png" alt="Alfchamps logo" width="240">
+
+# Alfchamps
 
 Security reporting tool for penetration testers and security engineers, built in
 loving memory of **Alfred** — our champion.
@@ -133,8 +135,5 @@ authentication and a proper deployment review before doing so.
 
 ## Tribute / memorial
 
-The in-memory tribute for Alfred is **hardcoded** and lives in
-`backend/app/memorial.py`. It cannot be changed at runtime — only via a pull
-request. See [`docs/MEMORIAL.md`](docs/MEMORIAL.md) and
-[`assets/README.md`](assets/README.md) for details, including where to add a
-photo of Alfred.
+This tool is built in loving memory of Alfred, our champion — and the best dog a human could ask for.
+Best friend, always by my side. Forever missed, never forgotten.
