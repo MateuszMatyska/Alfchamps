@@ -1,6 +1,16 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 STATUS_VALUES = {"not_tested", "in_progress", "passed", "failed", "na"}
+
+
+def _clean_reference_url(value: str) -> str:
+    """Allow only empty or absolute http(s) URLs (never javascript:/data:)."""
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if not value.lower().startswith(("http://", "https://")):
+        raise ValueError("reference_url must be an http(s) URL")
+    return value
 
 
 class ChecklistItemOut(BaseModel):
@@ -9,6 +19,8 @@ class ChecklistItemOut(BaseModel):
     title: str
     description: str
     how_to_test: str
+    test_examples: str = ""
+    reference_url: str = ""
     remediation: str
     asvs_level: int | None = None
 
@@ -40,6 +52,8 @@ class ProjectItemOut(BaseModel):
     title: str = ""
     description: str = ""
     how_to_test: str = ""
+    test_examples: str = ""
+    reference_url: str = ""
     status: str
     notes: str
     reproduce_steps: str
@@ -97,12 +111,16 @@ class ProjectItemUpdate(BaseModel):
 
 
 class ProjectItemAdd(BaseModel):
-    code: str = Field(min_length=1, max_length=64)
+    code: str = Field(default="", max_length=64)
     title: str = Field(min_length=1, max_length=256)
     description: str = ""
     how_to_test: str = ""
+    test_examples: str = ""
+    reference_url: str = ""
     reproduce_steps: str = ""
     parent_id: int | None = None
+
+    _check_reference_url = field_validator("reference_url")(_clean_reference_url)
 
 
 class StandardSelect(BaseModel):

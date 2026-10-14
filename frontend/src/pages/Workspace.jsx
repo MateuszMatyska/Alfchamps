@@ -12,7 +12,20 @@ const STATUS_LABEL = {
   na: 'N/A',
 }
 
-const EMPTY_CUSTOM = { code: '', title: '', description: '', reproduce_steps: '' }
+const EMPTY_CUSTOM = { title: '', description: '', reproduce_steps: '' }
+
+// Only http(s) links are rendered as documentation links.
+const safeUrl = (url) => (/^https?:\/\//i.test(url || '') ? url : '')
+
+// Next auto sub-point code, mirroring the backend: A01 -> A01-01, A01-02, ...
+const nextSubCode = (item) => {
+  const base = item?.code || 'CUSTOM'
+  const highest = (item?.children || []).reduce((max, child) => {
+    const m = /-(\d+)$/.exec(child.code || '')
+    return m ? Math.max(max, Number(m[1])) : max
+  }, 0)
+  return `${base}-${String(highest + 1).padStart(2, '0')}`
+}
 
 export default function WorkspacePage() {
   const { id } = useParams()
@@ -62,6 +75,7 @@ export default function WorkspacePage() {
   }, [])
 
   const activeItem = useMemo(() => findItem(project?.items || [], active), [project, active, findItem])
+  const activeIsSub = activeItem?.parent_id != null
 
   const groupName = (code) => {
     if (code.startsWith('API')) return 'OWASP API Top 10'
@@ -76,17 +90,12 @@ export default function WorkspacePage() {
   const groups = useMemo(() => {
     if (!project) return []
     const map = {}
-    let customGroup = null
     project.items.forEach((item) => {
-      const isCustom = !item.code || item.code.startsWith('CUSTOM')
-      const key = isCustom ? 'Custom items' : groupName(item.code)
-      if (key === 'Custom items') customGroup = customGroup || { name: key, items: [] }
-      const g = key === 'Custom items' ? customGroup : (map[key] = map[key] || { name: key, items: [] })
+      const key = groupName(item.code)
+      const g = (map[key] = map[key] || { name: key, items: [] })
       g.items.push(item)
     })
-    const result = Object.values(map)
-    if (customGroup) result.push(customGroup)
-    return result
+    return Object.values(map)
   }, [project])
 
   const selectItem = (itemId) => {
@@ -135,18 +144,17 @@ export default function WorkspacePage() {
 
   const addSub = async () => {
     if (!custom.title.trim()) {
-      setError('Custom sub-check needs a title.')
+      setError('Sub-check needs a title.')
       return
     }
-    if (!activeItem) {
-      setError('Select a checklist item to add the sub-check under.')
+    if (!activeItem || activeIsSub) {
+      setError('Select a main point to add the sub-check under.')
       return
     }
     setSaving(true)
     setError('')
     try {
       const created = await api.addCustomItem(id, {
-        code: custom.code.trim() || 'CUSTOM',
         title: custom.title.trim(),
         description: custom.description,
         reproduce_steps: custom.reproduce_steps,
@@ -160,10 +168,27 @@ export default function WorkspacePage() {
       await load()
       setActive(created.id)
       setDraft({
-        status: created.status || 'not_tested',
-        notes: created.notes || '',
+        status: 'not_tested',
+        notes: '',
         reproduce_steps: created.reproduce_steps || custom.reproduce_steps,
       })
+      setSaving(false)
+    } catch (e) {
+      setError(e.message)
+      setSaving(false)
+    }
+  }
+
+  const removeSub = async () => {
+    if (!activeItem || !activeIsSub) return
+    if (!window.confirm(`Remove sub-check ${activeItem.code}? This cannot be undone.`)) return
+    setSaving(true)
+    setError('')
+    try {
+      await api.deleteItem(id, activeItem.id)
+      const parentId = project.items.find((it) => (it.children || []).some((c) => c.id === activeItem.id))?.id
+      await load()
+      setActive(parentId || null)
       setSaving(false)
     } catch (e) {
       setError(e.message)
@@ -174,9 +199,11 @@ export default function WorkspacePage() {
   if (loading) return <div className="spinner">Loading workspace…</div>
   if (!project) return <div className="error-box">{error || 'Project not found'}</div>
 
+  const docUrl = safeUrl(activeItem?.reference_url)
+
   return (
     <div>
-      <div className="action-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="action-row page-head">
         <h1 style={{ margin: 0 }}>{project.name}</h1>
         <Link to={`/project/${id}/report`} className="btn">
           Report Settings
@@ -244,6 +271,19 @@ export default function WorkspacePage() {
                   <strong>How to test:</strong> {activeItem.how_to_test}
                 </p>
               )}
+              {activeItem.test_examples && (
+                <p>
+                  <strong>Test examples:</strong> {activeItem.test_examples}
+                </p>
+              )}
+              {docUrl && (
+                <p>
+                  <strong>Documentation:</strong>{' '}
+                  <a href={docUrl} target="_blank" rel="noopener noreferrer">
+                    {docUrl}
+                  </a>
+                </p>
+              )}
 
               <div className="grid grid-2" style={{ marginTop: 16 }}>
                 <div>
@@ -272,7 +312,7 @@ export default function WorkspacePage() {
                 />
               </div>
 
-              {activeItem.parent_id != null && (
+              {activeIsSub && (
                 <>
                   <div style={{ marginTop: 16 }}>
                     <label className="label">Reproduction steps</label>
@@ -292,6 +332,9 @@ export default function WorkspacePage() {
                       Upload screenshot
                       <input type="file" accept="image/*" style={{ display: 'none' }} onChange={onUpload} />
                     </label>
+                    <button className="btn btn-danger" onClick={removeSub} disabled={saving}>
+                      Remove sub-check
+                    </button>
                   </div>
 
                   {(activeItem.screenshots || []).length > 0 && (
@@ -308,7 +351,7 @@ export default function WorkspacePage() {
                   )}
                 </>
               )}
-              {activeItem.parent_id == null && (
+              {!activeIsSub && (
                 <div className="action-row">
                   <button className="btn" onClick={save} disabled={saving}>
                     {saving ? 'Saving…' : 'Save'}
@@ -316,19 +359,14 @@ export default function WorkspacePage() {
                 </div>
               )}
 
-              <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-                <h3>Add sub-check to this item</h3>
-                <div className="grid grid-2">
-                  <div>
-                    <label className="label">Code (optional)</label>
-                    <input
-                      className="input"
-                      value={custom.code}
-                      onChange={(e) => setCustom({ ...custom, code: e.target.value })}
-                      placeholder="CUSTOM-01"
-                    />
-                  </div>
-                  <div>
+              {!activeIsSub && (
+                <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+                  <h3>Add sub-check to this item</h3>
+                  <p className="muted" style={{ marginTop: 0 }}>
+                    Sub-check code is generated automatically as{' '}
+                    <strong>{nextSubCode(activeItem)}</strong>.
+                  </p>
+                  <div style={{ marginTop: 12 }}>
                     <label className="label">Title</label>
                     <input
                       className="input"
@@ -337,38 +375,38 @@ export default function WorkspacePage() {
                       placeholder="Custom security check"
                     />
                   </div>
+                  <div style={{ marginTop: 12 }}>
+                    <label className="label">Description</label>
+                    <textarea
+                      className="textarea"
+                      value={custom.description}
+                      onChange={(e) => setCustom({ ...custom, description: e.target.value })}
+                      placeholder="What to test and how…"
+                    />
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <label className="label">Reproduction steps</label>
+                    <textarea
+                      className="textarea"
+                      value={custom.reproduce_steps}
+                      onChange={(e) => setCustom({ ...custom, reproduce_steps: e.target.value })}
+                      placeholder={'1. Navigate to…\n2. Send request…'}
+                    />
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <label className="label">Screenshots (optional)</label>
+                    <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
+                      {customFiles.length ? `Choose screenshots (${customFiles.length} selected)` : 'Choose screenshots'}
+                      <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onAddFiles} />
+                    </label>
+                  </div>
+                  <div className="action-row" style={{ marginTop: 12 }}>
+                    <button className="btn btn-secondary" onClick={addSub} disabled={saving}>
+                      {saving ? 'Adding…' : 'Add sub-check'}
+                    </button>
+                  </div>
                 </div>
-                <div style={{ marginTop: 12 }}>
-                  <label className="label">Description</label>
-                  <textarea
-                    className="textarea"
-                    value={custom.description}
-                    onChange={(e) => setCustom({ ...custom, description: e.target.value })}
-                    placeholder="What to test and how…"
-                  />
-                </div>
-                <div style={{ marginTop: 12 }}>
-                  <label className="label">Reproduction steps</label>
-                  <textarea
-                    className="textarea"
-                    value={custom.reproduce_steps}
-                    onChange={(e) => setCustom({ ...custom, reproduce_steps: e.target.value })}
-                    placeholder={'1. Navigate to…\n2. Send request…'}
-                  />
-                </div>
-                <div style={{ marginTop: 12 }}>
-                  <label className="label">Screenshots (optional)</label>
-                  <label className="btn btn-secondary" style={{ cursor: 'pointer' }}>
-                    {customFiles.length ? `Choose screenshots (${customFiles.length} selected)` : 'Choose screenshots'}
-                    <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={onAddFiles} />
-                  </label>
-                </div>
-                <div className="action-row" style={{ marginTop: 12 }}>
-                  <button className="btn btn-secondary" onClick={addSub} disabled={saving}>
-                    {saving ? 'Adding…' : 'Add sub-check'}
-                  </button>
-                </div>
-              </div>
+              )}
             </>
           ) : (
             <div className="empty-state">

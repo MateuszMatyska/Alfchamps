@@ -3,7 +3,7 @@
 Project: Security reporting tool for pen testers / security engineers (tribute to Alfred, our champion).
 Stack: FastAPI + SQLite/SQLAlchemy + ReportLab (PDF) / React + Vite. Dual deployment (local venv + podman/docker).
 
-Last updated: 2026-09-17
+Last updated: 2026-10-14
 
 ## Status Legend
 - [x] Done and verified
@@ -88,6 +88,49 @@ Seeders in `backend/app/seed/` (idempotent, helpers in `helpers.py`):
   - `ReportConfig.exec_summary` + config GET/PUT + schema
   - Textarea in Report Settings; rendered **above** the status-count table (table unchanged)
 - **Verified:** 16 pytest tests pass, ruff clean, ESLint clean, Vite build OK, full E2E via TestClient AND through the running Podman stack (migration on the persisted volume DB, sub-point + screenshots + exec summary + PDF, logo on cover, memorial photo served)
+
+## 10. Done — Sub-point naming/removal, richer points, professional sizing (2026-10-14)
+- **Custom points are always sub-points** under a main point (top-level custom items removed):
+  - `POST /projects/{id}/items` now requires `parent_id` (400 otherwise) and auto-generates the
+    code from the parent (`A01` → `A01-01`, `A01-02`, …), read-only in the UI.
+  - The add form only renders when a **main point** is selected.
+  - New **Remove sub-check** button (`DELETE /projects/{id}/items/{id}`); removal also cleans up the
+    orphaned project-scoped `ChecklistItem` (seeded items are never deleted).
+- **Richer main points:** `ChecklistItem.test_examples` + `ChecklistItem.reference_url`
+  (startup migration adds both columns). Shown in the Workspace detail pane and rendered in the PDF
+  (examples + a clickable "Documentation" hyperlink). `reference_url` is validated as http(s) only.
+- **Seed content:** curated examples + official deep links for Top 10 Web/API, MASVS, GenAI;
+  templated chapter/category examples + per-requirement/category links for ASVS (280) and WSTG (109).
+  Seeds are now **idempotent upserts**, so existing databases backfill the new fields on startup.
+- **PDF:** removed dead/broken header-furniture code that failed ruff; wired a working header
+  (logo + ALFCHAMPS) and footer (page number) on non-cover pages.
+- **Professional sizing pass:** normalised the inflated CSS scale (body 22→15px, buttons/nav 28→14px,
+  header 184→64px, logo 120→40px, inputs 20→14px), removed hard-coded inline sizes in
+  `App.jsx`/`Dashboard.jsx`, and cleaned the doubled-`;` artifacts.
+- **Verified:** 20 pytest tests pass, ruff clean, ESLint clean, Vite build OK; migration + backfill
+  verified against a copy of the existing dev DB (428/428 items gain examples + doc links).
+
+---
+
+## 11. Fixed — nginx/podman multi-second hangs & 502s (2026-10-14)
+Symptom: intermittent **~3–9 s delays** on `/projects`, `/projects/{id}` ("lists of tests"),
+`/memorial`, `/memorial/photo` and the logo, sometimes ending in **502 Bad Gateway**. `/` and the
+JS bundle stayed fast because nginx serves those statically.
+- **Root cause 1:** `proxy_pass http://backend:8000;` makes nginx resolve the service name **once at
+  startup** and cache the IP. Recreating the backend (`up -d --build` / `restart`) gives it a new IP,
+  so nginx kept dialing the **dead** address.
+- **Root cause 2:** podman's embedded DNS (`aardvark-dns`) accumulated **stale A records** for every
+  removed container (e.g. `backend → .2, .4, .8, .16`), so even runtime re-resolution round-robined
+  over dead IPs (~3 s timeout each → ~9 s total).
+- **Fix:** pin the compose network subnet (`10.89.0.0/24`) and give the backend a **static IP**
+  (`ipv4_address: 10.89.0.10`); `container/nginx.conf` now proxies to that fixed IP and no longer
+  depends on podman DNS at all. Survives full rebuild cycles (backend always returns to `.10`).
+- **Also:** a second podman storage root existed because podman had been run from the **Codium/VS Code
+  snap terminal** (`~/snap/codium/495/.local/share/containers/storage`) *and* a normal shell
+  (`~/.local/share/containers/storage`), causing "ghost" containers and a port-8080 conflict. Run
+  podman from a **normal terminal** (or stay consistently in one environment).
+- **Verified:** after `down` + `up -d --build`, all API endpoints answer in **4–62 ms**, backend IP
+  stays `10.89.0.10`, volume data and new fields intact.
 
 ---
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, alfchampsLogoUrl } from '../api/client.js'
+import { api } from '../api/client.js'
 
 export default function Dashboard() {
   const [projects, setProjects] = useState([])
@@ -36,7 +36,7 @@ export default function Dashboard() {
     <div>
       <div className="action-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <h1 style={{ margin: 0 }}>Security Tests</h1>
-        <Link to="/memorial" className="btn btn-secondary" style={{ fontSize: 28, padding: '11px 20px', fontWeight: 700, borderRadius: 10 }}>
+        <Link to="/memorial" className="btn btn-secondary">
           🏆 Memorial
         </Link>
       </div>

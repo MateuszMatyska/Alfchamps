@@ -50,6 +50,8 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
         out.title = pi.checklist_item.title if pi.checklist_item else ""
         out.description = pi.checklist_item.description if pi.checklist_item else ""
         out.how_to_test = pi.checklist_item.how_to_test if pi.checklist_item else ""
+        out.test_examples = pi.checklist_item.test_examples if pi.checklist_item else ""
+        out.reference_url = pi.checklist_item.reference_url if pi.checklist_item else ""
     for pi in project.items:
         if pi.parent_id is not None and pi.parent_id in out_by_id:
             out_by_id[pi.parent_id].children.append(out_by_id[pi.id])
