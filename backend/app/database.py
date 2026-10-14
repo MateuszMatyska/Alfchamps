@@ -27,6 +27,8 @@ _EXTRA_COLUMNS: list[tuple[str, str, str]] = [
     # table, column, SQL type
     ("project_items", "parent_id", "INTEGER"),
     ("report_configs", "exec_summary", "TEXT"),
+    ("checklist_items", "test_examples", "TEXT"),
+    ("checklist_items", "reference_url", "TEXT"),
 ]
 
 

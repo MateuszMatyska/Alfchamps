@@ -1,4 +1,5 @@
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -45,27 +46,20 @@ STATUS_COLOR = {
 }
 
 
-def _alfchamps_logo_path() -> Path:
-    """Resolve the Alfchamps cover/header logo across container + repo locations."""
-    # Mirrors the resolution reports.py already used for the cover: in containers
-    # __file__ resolves differently, so try both repo-root and working-dir paths.
-    for candidate in (
-        Path(__file__).resolve().parents[3] / "assets" / "alfchamps_logo.png",
-        Path("assets", "alfchamps_logo.png"),
-    ):
-        if candidate.exists():
-            return candidate
-    return BASE_DIR / "assets" / "alfchamps_logo.png"
+def _page_furniture(canvas, doc, accent):
+    """Header (logo + ALFCHAMPS) and footer (logo + page number) on every page.
 
-
-def _draw_page_furniture(canvas, doc, show_page_number: bool):
-    """Header (logo + ALFCHAMPS, one line) and footer (logo + page number)."""
+    Skipped on the cover page so the branding stays clean there.
+    """
+    page = canvas.getPageNumber()
+    if page == 1:
+        return
     canvas.saveState()
     try:
         pw, ph = A4
         lm = doc.leftMargin
         rm = doc.rightMargin
-        logo = _alfchamps_logo_path()
+        logo = _logo_path()
         has_logo = logo.exists()
 
         # ---- Header: tiny Alfchamps logo left, "ALFCHAMPS" text beside it ----
@@ -87,11 +81,9 @@ def _draw_page_furniture(canvas, doc, show_page_number: bool):
             canvas.setFont("Helvetica-Bold", 8)
             canvas.setFillColor(accent)
             canvas.drawString(lm + head_h + 2 * mm, y_head + 1.2 * mm, "ALFCHAMPS")
-        # subtle rule under the header on non-cover pages
-        if show_page_number:
-            canvas.setStrokeColor(colors.HexColor("#dddddd"))
-            canvas.setLineWidth(0.4)
-            canvas.line(lm, y_head - 3 * mm, pw - rm, y_head - 3 * mm)
+        canvas.setStrokeColor(colors.HexColor("#dddddd"))
+        canvas.setLineWidth(0.4)
+        canvas.line(lm, y_head - 3 * mm, pw - rm, y_head - 3 * mm)
 
         # ---- Footer: logo (optional) + right-aligned page number ----
         y_foot = 7 * mm
@@ -108,24 +100,13 @@ def _draw_page_furniture(canvas, doc, show_page_number: bool):
                 )
             except (OSError, ValueError):
                 pass
-        if show_page_number:
-            canvas.setFont("Helvetica", 8)
-            canvas.setFillColor(colors.HexColor("#555555"))
-            canvas.drawRightString(pw - rm, y_foot + 0.5 * mm, str(canvas.getPageNumber()))
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(colors.HexColor("#555555"))
+        canvas.drawRightString(pw - rm, y_foot + 0.5 * mm, str(page))
     finally:
         canvas.restoreState()
 
 
-def _page_furniture_first(canvas, doc, accent):
-    """First (cover) page: header/footer but NO page number."""
-    _draw_page_furniture(canvas, doc, accent, show_page_number=False)
-
-
-def _page_furniture_later(canvas, doc, accent):
-    """Every page after the cover: header/footer WITH page number."""
-    _draw_page_furniture(canvas, doc, accent, show_page_number=True)
-
-_COVER_FONT = "Helvetica-Bold"
 _LOGO_CANDIDATES = (
     Path(__file__).resolve().parents[3] / "assets" / "alfchamps_logo.png",
     Path("assets", "alfchamps_logo.png"),
@@ -367,7 +348,11 @@ def generate_pdf(project_id: int, db: Session = Depends(get_db)):
             for child in sorted(pi.children or [], key=lambda c: c.id):
                 _render_finding(story, child, styles, body, accent, is_sub=True)
 
-    doc.build(story)
+    doc.build(
+        story,
+        onFirstPage=partial(_page_furniture, accent=accent),
+        onLaterPages=partial(_page_furniture, accent=accent),
+    )
     return FileResponse(str(out_file), filename=f"alfchamps-{project.id}.pdf", media_type="application/pdf")
 
 
@@ -376,6 +361,8 @@ def _render_finding(story, pi, styles, body, accent, is_sub: bool = False):
     title = pi.checklist_item.title if pi.checklist_item else ""
     desc = getattr(pi.checklist_item, "description", "") if pi.checklist_item else ""
     how = getattr(pi.checklist_item, "how_to_test", "") if pi.checklist_item else ""
+    examples = getattr(pi.checklist_item, "test_examples", "") if pi.checklist_item else ""
+    ref = getattr(pi.checklist_item, "reference_url", "") if pi.checklist_item else ""
     left = 12 if is_sub else 0
     item_st = ParagraphStyle(
         "Item",
@@ -391,6 +378,11 @@ def _render_finding(story, pi, styles, body, accent, is_sub: bool = False):
         story.append(Paragraph(_esc("What / Why: ") + _esc(desc), _indented(body, left)))
     if how:
         story.append(Paragraph(_esc("How to test: ") + _esc(how), _indented(body, left)))
+    if examples:
+        story.append(Paragraph(_esc("Test examples: ") + _esc(examples), _indented(body, left)))
+    if ref:
+        link = f'<link href="{_esc(ref)}">{_esc(ref)}</link>'
+        story.append(Paragraph("Documentation: " + link, _indented(body, left)))
     if pi.notes:
         story.append(Paragraph(_esc("Notes: ") + _esc(pi.notes), _indented(body, left)))
     if is_sub:

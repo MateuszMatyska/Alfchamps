@@ -80,13 +80,62 @@ def test_create_and_update_project_item(client, project_id):
     assert body["reproduce_steps"] == "1. do x"
 
 
-def test_add_custom_item(client, project_id):
+def test_custom_item_requires_parent(client, project_id):
+    # Custom points are always sub-points: no parent -> rejected.
+    r = client.post(f"/projects/{project_id}/items", json={"title": "No parent"})
+    assert r.status_code == 400
+
+
+def test_sub_point_codes_are_auto_generated(client, project_id):
+    parent = client.get(f"/projects/{project_id}").json()["items"][0]
+    first = client.post(
+        f"/projects/{project_id}/items",
+        json={"title": "Sub one", "parent_id": parent["id"]},
+    )
+    second = client.post(
+        f"/projects/{project_id}/items",
+        json={"title": "Sub two", "parent_id": parent["id"]},
+    )
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["code"] == f"{parent['code']}-01"
+    assert second.json()["code"] == f"{parent['code']}-02"
+
+
+def test_remove_sub_point(client, project_id):
+    parent = client.get(f"/projects/{project_id}").json()["items"][0]
+    sub = client.post(
+        f"/projects/{project_id}/items",
+        json={"title": "Temp sub", "parent_id": parent["id"]},
+    ).json()
+
+    detail = client.get(f"/projects/{project_id}").json()
+    parent_out = next(i for i in detail["items"] if i["id"] == parent["id"])
+    assert sub["id"] in [c["id"] for c in parent_out["children"]]
+
+    deleted = client.delete(f"/projects/{project_id}/items/{sub['id']}")
+    assert deleted.status_code == 204
+
+    detail = client.get(f"/projects/{project_id}").json()
+    parent_out = next(i for i in detail["items"] if i["id"] == parent["id"])
+    assert sub["id"] not in [c["id"] for c in parent_out["children"]]
+
+
+def test_main_point_has_examples_and_doc_link(client, project_id):
+    items = client.get(f"/projects/{project_id}").json()["items"]
+    with_doc = [i for i in items if i["reference_url"]]
+    assert with_doc, "seeded main points should carry documentation links"
+    assert with_doc[0]["reference_url"].startswith("http")
+    assert any(i["test_examples"] for i in items), "seeded main points should carry test examples"
+
+
+def test_reference_url_rejects_non_http_scheme(client, project_id):
+    parent = client.get(f"/projects/{project_id}").json()["items"][0]
     r = client.post(
         f"/projects/{project_id}/items",
-        json={"code": "CUSTOM-01", "title": "Custom check", "description": "d", "how_to_test": "h"},
+        json={"title": "Bad link", "parent_id": parent["id"], "reference_url": "javascript:alert(1)"},
     )
-    assert r.status_code == 200
-    assert r.json()["code"] == "CUSTOM-01"
+    assert r.status_code == 422
 
 
 def test_add_sub_point_and_nested_listing(client, project_id):

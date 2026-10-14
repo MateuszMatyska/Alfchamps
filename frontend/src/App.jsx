@@ -15,7 +15,7 @@ export default function App() {
             <img
               src={alfchampsLogoUrl()}
               alt="Alfchamps logo"
-              style={{ height: 120, width: 120, objectFit: 'contain', display: 'inline-block' }}
+              className="brand-logo"
             />
           </NavLink>
           <nav className="nav">

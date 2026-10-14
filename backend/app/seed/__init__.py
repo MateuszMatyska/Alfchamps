@@ -2,7 +2,8 @@
 
 Ships official ASVS 4.0.3 requirements (parsed from the bundled OWASP CSV) and
 WSTG tests (parsed from the official checklist) plus curated seeds for other
-standards. Seeding is skipped when the standard already exists.
+standards. Seeding is an idempotent upsert keyed on standard + code, so it also
+backfills metadata (test examples, documentation links) onto existing databases.
 """
 from sqlalchemy.orm import Session
 

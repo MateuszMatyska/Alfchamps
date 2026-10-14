@@ -32,6 +32,12 @@ services:
     # Healthcheck is defined in Containerfile.backend (HEALTHCHECK), not here,
     # because podman-compose mangles the quoting of an inline healthcheck test.
     restart: unless-stopped
+    # Fixed IP so the nginx frontend can proxy to it without relying on
+    # podman's DNS (which caches stale IPs across container recreations).
+    # Must be inside the pinned subnet defined under `networks:` at the bottom.
+    networks:
+      default:
+        ipv4_address: 10.89.0.10
 
   frontend:
     build:
@@ -45,7 +51,22 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     restart: unless-stopped
+    networks:
+      - default
 
 volumes:
   alfchamps_data:
     name: alfchamps_data
+
+# Pin the network subnet so podman's embedded DNS gateway (10.89.0.1) is
+# stable. The nginx frontend uses that gateway as its `resolver` to re-resolve
+# the backend service name at request time.
+networks:
+  default:
+    name: alfchamps_default
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.89.0.0/24
+          gateway: 10.89.0.1

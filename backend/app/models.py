@@ -30,6 +30,8 @@ class ChecklistItem(Base):
     title: Mapped[str] = mapped_column(String(256))
     description: Mapped[str] = mapped_column(Text, default="")
     how_to_test: Mapped[str] = mapped_column(Text, default="")
+    test_examples: Mapped[str] = mapped_column(Text, default="")
+    reference_url: Mapped[str] = mapped_column(String(512), default="")
     remediation: Mapped[str] = mapped_column(Text, default="")
     asvs_level: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

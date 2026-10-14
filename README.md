@@ -22,7 +22,7 @@ PDF reports.
   - Mobile — **MASVS**
   - GenAI / LLM — **OWASP GenAI LLM Top 10 (2026)**
 - **Test wizard**: name a test, pick standards, and (for ASVS) choose a verification level.
-- **Workspace**: grouped checklist with per-item status, notes, reproduction steps, and screenshot uploads. Add your own custom checks as **sub-points** nested under the item you're testing (with their own repro steps and screenshots).
+- **Workspace**: grouped checklist with per-item status, notes, reproduction steps, and screenshot uploads. Each **main point** shows concrete **test examples** and a **documentation link** deep-linking to the relevant OWASP paragraph. Add your own **custom sub-points** nested under a main point (auto-numbered `A01-01`, `A01-02`, …), each with their own repro steps and screenshots — and remove them again when no longer needed.
 - **Branded PDF reports**: choose an accent color, add a company name/logo, and download a themed PDF with a custom executive summary, per-item detail (sub-points included), the **Alfchamps logo** on the cover, and Alfred's tribute.
 
 ## Tech stack
@@ -81,6 +81,10 @@ Then open **http://localhost:8080**.
 - The backend is **not** published to the host (internal network only).
 - The frontend is bound to `127.0.0.1:8080` (localhost).
 - Data (SQLite DB, uploads, reports) persists in the `alfchamps_data` volume.
+- The compose file pins the network subnet (`10.89.0.0/24`) and gives the backend a
+  **static IP** (`10.89.0.10`); nginx proxies to that fixed IP. This avoids nginx
+  caching a stale backend IP after a rebuild and podman's DNS returning stale A
+  records for recreated containers — both of which cause multi-second hangs / 502s.
 
 ## Project structure
 
